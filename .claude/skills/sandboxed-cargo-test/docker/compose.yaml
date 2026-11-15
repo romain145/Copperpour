@@ -1,0 +1,95 @@
+# Sandboxed cargo runs. Driven by ../scripts/run.ps1, which sets:
+#   RUST_VERSION     toolchain channel from rust-toolchain.toml (e.g. 1.96.0)
+#   APT_PACKAGES     native build dependencies baked into the image
+#   RUST_TARGETS     extra rustup targets baked into the image
+#   SNAPSHOT_VOLUME  Docker volume holding src.tar (a `git archive` of the ref)
+#   CACHE_PREFIX     name prefix of the per-repository cache volumes
+#   BUILD_COMMIT     commit id of the snapshot, for build scripts that want it
+#
+# The source reaches the container only as a tar in a read-only volume, so
+# nothing the build or the tests do can touch the host working tree.
+
+x-sandbox: &sandbox
+  image: sandboxed-cargo-test:${RUST_VERSION:-1}
+  build:
+    context: .
+    args:
+      RUST_VERSION: ${RUST_VERSION:-1}
+      APT_PACKAGES: ${APT_PACKAGES:-protobuf-compiler libprotobuf-dev cmake clang libclang-dev}
+      RUST_TARGETS: ${RUST_TARGETS:-}
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 4096
+  volumes:
+    # The whole cargo home, so cargo's package-cache lock is on the shared
+    # volume too and concurrent fetches queue instead of colliding.
+    - cargo-home:/cargo-home
+    - target:/target
+    - snapshot:/in:ro
+
+services:
+  # Downloads the locked dependencies. Network is on, but `cargo fetch` runs
+  # no build scripts and no project code.
+  fetch:
+    <<: *sandbox
+    environment:
+      CARGO_TARGET_DIR: /target
+      CARGO_HOME: /cargo-home
+    entrypoint:
+      - sh
+      - -c
+      - mkdir -p /src && tar -xf /in/src.tar -C /src && cd /src && exec cargo "$$@"
+      - cargo
+    command: ["fetch", "--locked"]
+
+  # Builds and runs the code with no network at all.
+  #
+  # The target dir is shared by every worktree of the repo, and cargo decides
+  # whether a crate is up to date by comparing file times. Two things keep one
+  # worktree from being tested against another's build:
+  #   1. flock: a run holds /target/.sct-run.lock from before it unpacks the
+  #      source until cargo exits, so runs are strictly one after another.
+  #   2. tar -m: the unpacked files get the current time, not the commit time.
+  # Together, every source file is newer than everything an earlier run built,
+  # so cargo rebuilds the repo's own crates. Unpacking BEFORE taking the lock
+  # is the bug this replaces: a run that unpacked early and built late found
+  # another worktree's newer artifacts and used them.
+  test:
+    <<: *sandbox
+    network_mode: none
+    environment:
+      CARGO_TARGET_DIR: /target
+      CARGO_HOME: /cargo-home
+      CARGO_NET_OFFLINE: "true"
+      # The repo's crates rebuild on every run (see above), so incremental
+      # data is never reused; it only grows the shared target volume, which
+      # reached 28 GB in one evening and filled the Docker disk.
+      CARGO_INCREMENTAL: "0"
+      KONNECT_BUILD_COMMIT: ${BUILD_COMMIT:-}
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        mkdir -p /src && echo "sandbox: waiting for the build lock" &&
+        exec flock /target/.sct-run.lock sh -c
+        'echo "sandbox: lock acquired" && tar -xmf /in/src.tar -C /src && cd /src && exec cargo "$$@"'
+        cargo "$$@"
+      - cargo
+    command: ["test", "--locked", "--workspace", "--no-fail-fast"]
+
+volumes:
+  # One cargo home and one target dir per repository, shared by all of its
+  # worktrees. A target dir per worktree costs several GB each and filled the
+  # Docker disk when four agents built at once.
+  cargo-home:
+    external: true
+    name: ${CACHE_PREFIX:?run.ps1 sets CACHE_PREFIX}_cargo-home
+  target:
+    external: true
+    name: ${CACHE_PREFIX:?run.ps1 sets CACHE_PREFIX}_target
+  # Holds src.tar. run.ps1 creates it and copies the tar in with `docker cp`.
+  # A named volume, not a host bind mount: Docker Desktop's Windows file
+  # sharing can hang every container that mounts a host folder.
+  snapshot:
+    external: true
+    name: ${SNAPSHOT_VOLUME:?run.ps1 sets SNAPSHOT_VOLUME}
