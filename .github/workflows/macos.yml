@@ -133,10 +133,7 @@ jobs:
           # The linker signs only the arm64 slice, so the merged binary had no
           # designated requirement and macOS TCC re-prompted for Documents
           # access on every launch. Sign both slices, then check them.
-          codesign --force --sign - --identifier copperpour dist/universal/copperpour
-          for arch in arm64 x86_64; do
-            codesign --verify --strict --arch "$arch" dist/universal/copperpour
-          done
+          # CONTROL: signing and the per-slice verify removed; only the designated-requirement check is left.
           # Without a signature codesign exits non-zero; keep its message so the
           # log says why the check below fails.
           requirement="$(codesign -d -r- dist/universal/copperpour 2>&1)" || true
