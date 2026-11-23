@@ -9,7 +9,7 @@ name: Linux aarch64
 # artifacts beside macos.yml's.
 on:
   push:
-    branches: [main]
+    branches: [main, smoke/linux-aarch64]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -58,7 +58,7 @@ jobs:
       - name: Check
         run: cargo check --workspace --locked
       - name: Test (unit + integration)
-        run: cargo test --workspace --locked --lib --tests
+        run: cargo test --workspace --locked --lib --tests --no-fail-fast
       - name: Doctests
         run: cargo test --workspace --locked --doc
 
@@ -68,7 +68,7 @@ jobs:
   build:
     name: Build aarch64-unknown-linux-gnu
     # Release only: a v* tag, or a maintainer's manual run.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/smoke/linux-aarch64'
     # 22.04, not 24.04: its glibc (2.35) keeps the binary's floor at or below
     # the x86_64 release's. The glibc step below fails if a newer image raises
     # it; when GitHub retires 22.04, build in a Debian 12 container instead.
@@ -152,7 +152,7 @@ jobs:
             --binary "target/$TARGET/release/$BINARY_NAME" \
             --platform linux-aarch64 --out dist-mcpb
           bundle="dist-mcpb/copperpour-v$version-linux-aarch64.mcpb"
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
             python packaging/validate-mcpb.py --bundle "$bundle" \
               --expected-version "$version" --smoke-test --check-binary-version
           else
