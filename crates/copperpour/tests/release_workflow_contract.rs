@@ -55,6 +55,34 @@ fn release_workflow_has_a_non_publishing_pre_tag_entry_point() {
     );
 }
 
+/// linux-aarch64.yml builds release artifacts on GitHub, as macos.yml does, and
+/// publishes nothing: the maintainer cutting the release downloads them.
+#[test]
+fn linux_aarch64_artifacts_are_built_without_write_access() {
+    let linux = workflow("linux-aarch64.yml");
+
+    assert_eq!(
+        linux["permissions"],
+        serde_json::json!({}),
+        "permissions are granted per job"
+    );
+    let jobs = linux["jobs"]
+        .as_object()
+        .expect("linux-aarch64.yml must have jobs");
+    for (name, job) in jobs {
+        assert_eq!(
+            job["permissions"],
+            serde_json::json!({"contents": "read"}),
+            "{name} must not hold write access"
+        );
+    }
+    assert_eq!(
+        jobs["build"]["if"],
+        "github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')",
+        "the artifacts are built only for a v* tag or a maintainer's manual run"
+    );
+}
+
 #[test]
 fn release_pcm_validation_uses_the_effective_release_version() {
     let release = workflow("release.yml");

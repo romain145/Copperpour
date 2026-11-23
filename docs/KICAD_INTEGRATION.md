@@ -313,3 +313,14 @@ server for the machine it runs on. The server directories sit one level below
 directory up, and `plugins/plugin.json` beside that directory. The IPC action's
 entrypoint is the launcher, which Windows cannot run; the action is hidden, and
 KiCad only logs an entrypoint it cannot run until the action is invoked.
+
+Linux aarch64 has a zip of its own, `copperpour-pcm-v<version>-linux-aarch64.zip`
+(`build-pcm.sh --platform linux-aarch64`), laid out like the other one-platform
+zips, with its server at `plugins/bin/copperpour`. It is not merged: with a
+fourth server the merged zip would pass `validate-pcm.py`'s download cap, which
+keeps it under the 100 MB at which KiCad's addon repository stops downloading.
+PCM has no CPU dimension, so it declares `linux` like the x86_64 zip, and on an
+aarch64 machine the merged package's launcher refuses with a message naming
+this zip. Once the addon repository lists Copperpour, the Plugin and Content
+Manager would offer such a machine the merged package as an update, which does
+not run there.

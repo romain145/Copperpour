@@ -28,6 +28,14 @@ case $(uname -s) in
     Linux)
         case $(uname -m) in
             x86_64 | amd64) platform=linux-x86_64 ;;
+            # Packaged on its own (build-pcm.sh --platform linux-aarch64): with
+            # it, this package would pass validate-pcm.py's download cap.
+            aarch64 | arm64)
+                echo "copperpour: no server for Linux $(uname -m) in this package;" \
+                    "install the release's copperpour-pcm-v<version>-linux-aarch64.zip" \
+                    "from https://github.com/Copperpour/Copperpour/releases" >&2
+                exit 126
+                ;;
             *)
                 echo "copperpour: no server for Linux $(uname -m) in this package" >&2
                 exit 126

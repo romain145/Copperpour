@@ -445,6 +445,46 @@ class Submission(unittest.TestCase):
             submission.build(self.template(), self.zips[:1], "0.0.0", self.URL)
 
 
+@unittest.skipUnless(shutil.which("bash") and shutil.which("zip"), "needs bash and zip")
+class LinuxAarch64Package(unittest.TestCase):
+    """build-pcm.sh --platform linux-aarch64: a Linux package of its own, which
+    the all-platforms merge leaves out (it would pass the download cap)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
+
+    def build(self) -> Path:
+        binary = self.tmp / "copperpour"
+        binary.write_bytes(MAGIC["linux"])
+        out = self.tmp / "aarch64"
+        built = subprocess.run(
+            ["bash", str(PACKAGING / "build-pcm.sh"), "--version", "0.0.0",
+             "--binary", str(binary), "--platform", "linux-aarch64", "--out", str(out)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(built.returncode, 0, built.stderr)
+        self.assertIn("copperpour-pcm-v0.0.0-linux-aarch64.zip", built.stdout)
+        return out / "copperpour-pcm-v0.0.0-linux-aarch64.zip"
+
+    def test_it_is_a_linux_package_named_for_aarch64(self):
+        path = self.build()
+        self.assertEqual(validate_pcm.validate_zip(path), [])
+        with zipfile.ZipFile(path) as z:
+            meta = json.loads(z.read("metadata.json"))
+            self.assertEqual(z.read("plugins/bin/copperpour"), MAGIC["linux"])
+        # PCM has no CPU dimension: it declares linux, as the x86_64 one does.
+        self.assertEqual(meta["versions"][0]["platforms"], ["linux"])
+
+    def test_the_merge_refuses_it(self):
+        # What a release's `merge-pcm.py dist/copperpour-pcm-v<version>-*.zip` meets.
+        zips = [platform_zip(self.tmp, p) for p in ("linux", "macos", "windows")]
+        result, merged = run_merge(self.tmp, [*zips, self.build()])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("linux-aarch64.zip: a second linux package", result.stderr)
+        self.assertFalse(merged.exists())
+
+
 @unittest.skipIf(os.name != "posix", "pcm-launcher.sh runs under a POSIX sh")
 class Launcher(unittest.TestCase):
     """pcm-launcher.sh, run as KiCad installs it, under a uname the test picks."""
@@ -503,10 +543,17 @@ exit 7
         self.assertEqual(out.splitlines()[0], f"macos pid {process.pid}")
 
     def test_unsupported_machine_fails_on_stderr_only(self):
+        process, out, err = self.run_as("Linux", "riscv64")
+        self.assertEqual(process.returncode, 126)
+        self.assertEqual(out, "")
+        self.assertIn("no server for Linux riscv64", err)
+
+    def test_aarch64_is_pointed_at_its_own_package(self):
         process, out, err = self.run_as("Linux", "aarch64")
         self.assertEqual(process.returncode, 126)
         self.assertEqual(out, "")
-        self.assertIn("no server for Linux aarch64", err)
+        self.assertIn("no server for Linux aarch64 in this package", err)
+        self.assertIn("copperpour-pcm-v<version>-linux-aarch64.zip", err)
 
     def test_symlink_loop_fails_instead_of_spinning(self):
         loop = self.tmp / "loop"

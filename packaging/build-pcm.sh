@@ -24,9 +24,14 @@
 # platform's binaries; merge-pcm.py combines the three into the package that
 # declares them all.
 #
+# linux-aarch64 is a Linux package for aarch64 machines. PCM has a platform
+# dimension but no CPU one, so it declares linux like the x86_64 package, and
+# only its zip name tells them apart. merge-pcm.py leaves it out: with a fourth
+# server the merged package would pass validate-pcm.py's download cap.
+#
 # Usage:
 #   packaging/build-pcm.sh [--version X.Y.Z] [--binary PATH]
-#                          [--platform macos|linux] [--out DIR]
+#                          [--platform macos|linux|linux-aarch64] [--out DIR]
 #
 # Defaults: version from Cargo.toml, binary target/release/copperpour, platform
 # from the host, output dist/.
@@ -44,7 +49,7 @@ out_dir="$repo_root/dist"
 usage() {
     cat >&2 <<'EOF'
 Usage: packaging/build-pcm.sh [--version X.Y.Z] [--binary PATH]
-                              [--platform macos|linux] [--out DIR]
+                              [--platform macos|linux|linux-aarch64] [--out DIR]
 
 Assembles the KiCAD PCM plugin zip (macOS/Linux port of build-pcm.ps1).
 Defaults: version from Cargo.toml, binary target/release/copperpour, platform from
@@ -78,10 +83,12 @@ if [ -z "$platform" ]; then
         *) echo "Cannot infer platform from $(uname -s); pass --platform" >&2; exit 1;;
     esac
 fi
+# pcm_platform is what metadata.json declares; $platform also names the zip.
 case "$platform" in
-    macos|linux) ;;
+    macos|linux) pcm_platform="$platform";;
+    linux-aarch64) pcm_platform="linux";;
     windows) echo "Windows packages come from build-pcm.ps1" >&2; exit 2;;
-    *) echo "--platform must be 'macos' or 'linux' (got '$platform')" >&2; exit 2;;
+    *) echo "--platform must be 'macos', 'linux' or 'linux-aarch64' (got '$platform')" >&2; exit 2;;
 esac
 if [ ! -f "$binary" ]; then
     echo "Binary not found: $binary" >&2
@@ -132,7 +139,7 @@ PY
 # substitution for quotes, heredoc text included, and an apostrophe there
 # breaks the parse (#408). The size goes through a file beside $staging.
 size_file="$(dirname "$staging")/install_size"
-python3 - "$repo_root/packaging/metadata.json" "$staging/metadata.json" "$version" "$staging" "$platform" > "$size_file" <<'PY'
+python3 - "$repo_root/packaging/metadata.json" "$staging/metadata.json" "$version" "$staging" "$pcm_platform" > "$size_file" <<'PY'
 import json, os, sys
 src, dst, version, staging, platform = sys.argv[1:6]
 m = json.load(open(src))
@@ -186,5 +193,5 @@ echo "PCM package: $zip_path"
 echo "  download_size:   $size"
 echo "  install_size:    $install_size"
 echo "  download_sha256: $sha"
-echo "  platforms:       [$platform]"
+echo "  platforms:       [$pcm_platform]"
 echo "  download_url:    https://github.com/Copperpour/Copperpour/releases/download/v$version/copperpour-pcm-v$version-$platform.zip"

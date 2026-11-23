@@ -19,6 +19,11 @@ Windows checkout may carry CRLF); plugin.json may differ only in the
 entrypoint. Both come from the Linux zip, whose entrypoint is
 bin/copperpour, the launcher. docs/KICAD_INTEGRATION.md explains the layout.
 
+The Linux aarch64 zip (build-pcm.sh --platform linux-aarch64) is not merged:
+with a fourth server the merged zip would pass validate-pcm.py's download cap,
+so it is published on its own and the launcher names it on aarch64. It declares
+linux, so passed here it is refused as a second linux package.
+
 Requires: pip install jsonschema
 """
 

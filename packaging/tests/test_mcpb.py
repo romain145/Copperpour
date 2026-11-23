@@ -128,6 +128,16 @@ class BuildAndValidateBundleTests(unittest.TestCase):
                     self.assertIsNotNone(manifest)
                     self.assertEqual(manifest["version"], "0.16.1")
 
+    def test_linux_aarch64_bundle_declares_linux(self):
+        # MCPB has no CPU dimension: only the file name tells the Linux bundles apart.
+        with tempfile.TemporaryDirectory() as td:
+            bundle = self._build_stub(Path(td), "linux-aarch64", blob=STUBS["linux"])
+            self.assertEqual(bundle.name, "copperpour-v0.16.1-linux-aarch64.mcpb")
+            errors, manifest = validate_mcpb.validate_bundle(bundle, "0.16.1")
+            self.assertEqual(errors, [])
+            self.assertEqual(manifest["compatibility"]["platforms"], ["linux"])
+            self.assertEqual(manifest["server"]["entry_point"], "server/copperpour")
+
     def test_build_is_byte_for_byte_reproducible(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -96,6 +96,8 @@ Requires **KiCad 10** on Windows, macOS or Linux.
    [Releases](https://github.com/Copperpour/Copperpour/releases):
    `copperpour-pcm-v<version>.zip` carries Windows, macOS and Linux x86_64. The
    smaller `copperpour-pcm-v<version>-{windows,macos,linux}.zip` carry one OS each.
+   On 64-bit Arm Linux, use `copperpour-pcm-v<version>-linux-aarch64.zip`: the
+   all-platforms package leaves it out to stay under KiCad's download limit.
    The macOS build is universal (Apple Silicon and Intel). The other release
    archives are standalone server binaries; see
    [Advanced installation](#advanced-installation).
@@ -130,8 +132,9 @@ the macOS or Linux server beside it, so the path is the same in both packages.
 **Claude Desktop (recommended — `.mcpb` extension)**: download the `.mcpb`
 package for your OS from [Releases](https://github.com/Copperpour/Copperpour/releases)
 (`copperpour-v<version>-windows-x86_64.mcpb`,
-`copperpour-v<version>-macos-universal.mcpb`, or
-`copperpour-v<version>-linux-x86_64.mcpb`), then install it via
+`copperpour-v<version>-macos-universal.mcpb`,
+`copperpour-v<version>-linux-x86_64.mcpb`, or
+`copperpour-v<version>-linux-aarch64.mcpb`), then install it via
 **Settings → Extensions → Advanced settings → Install Extension…** (or
 double-click on Windows/macOS). The `.mcpb` bundle is self-contained — no manual
 JSON editing or PCM binary path lookup is needed. KiCad 10 (with **Enable KiCad
@@ -246,7 +249,8 @@ For unusual KiCad locations or a custom API socket, see
 <summary><b>Standalone binary</b>: run the server without the KiCad plugin</summary>
 
 The Releases page also has standalone server archives (`copperpour-v<version>-<target>`,
-for example `aarch64-apple-darwin`). Unpack one and register the binary as in Step 2.
+for example `aarch64-apple-darwin` or `aarch64-unknown-linux-gnu`). Unpack one and
+register the binary as in Step 2.
 
 On macOS these files are not code-signed yet. If you downloaded one through a
 browser, clear the quarantine flag first:

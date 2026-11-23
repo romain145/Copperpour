@@ -13,10 +13,13 @@ or locating the KiCad PCM plugin's version-dependent installation path.
 | Windows (`x86_64`) | `copperpour-v<version>-windows-x86_64.mcpb` | Official `.mcpb` install (`>=0.10.0`) |
 | macOS (Apple Silicon & Intel) | `copperpour-v<version>-macos-universal.mcpb` | Official `.mcpb` install (`>=0.10.0`) |
 | Linux (`x86_64`) | `copperpour-v<version>-linux-x86_64.mcpb` | Beta / community builds (see [Linux notes](#linux-notes)) |
+| Linux (`aarch64`) | `copperpour-v<version>-linux-aarch64.mcpb` | Beta / community builds (see [Linux notes](#linux-notes)) |
 
 Each bundle carries the compiled `copperpour` binary for its target platform,
 an MCPB `v0.3` `manifest.json` declaring `server.type: "binary"`, and the
-Copperpour icon. No Node.js, Python, or external runtime is required.
+Copperpour icon. No Node.js, Python, or external runtime is required. MCPB has
+no architecture field, so both Linux bundles declare `linux`: pick the one for
+your CPU (`uname -m`).
 
 ## Prerequisites
 
@@ -99,7 +102,8 @@ If your Linux Claude Desktop build does not install `.mcpb` files directly, use
 the manual fallback:
 
 1. Either download the standalone Linux archive
-   (`copperpour-v<version>-x86_64-unknown-linux-gnu.tar.gz`) or unzip the
+   (`copperpour-v<version>-x86_64-unknown-linux-gnu.tar.gz`, or
+   `copperpour-v<version>-aarch64-unknown-linux-gnu.tar.gz` on aarch64) or unzip the
    `.mcpb` archive (a `.mcpb` file is a standard ZIP containing
    `server/copperpour`) into a permanent location such as
    `~/.local/share/copperpour/copperpour` and ensure it is executable
@@ -124,6 +128,9 @@ the manual fallback:
 python packaging/build-mcpb.py --binary target/release/copperpour --platform linux --out dist
 python packaging/validate-mcpb.py --bundle dist/copperpour-v<version>-linux-x86_64.mcpb --smoke-test
 ```
+
+On an aarch64 machine, pass `--platform linux-aarch64` instead; the bundle is
+`copperpour-v<version>-linux-aarch64.mcpb`.
 
 `validate-mcpb.py` checks the archive against the vendored MCPB `v0.3` JSON
 schema (`packaging/schema/mcpb-manifest-v0.3.schema.json`), verifies that the

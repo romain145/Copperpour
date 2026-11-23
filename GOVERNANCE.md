@@ -34,24 +34,29 @@ settings or the `main` ruleset.
   Check & Test on `windows-latest` joins them later (see
   [Where CI runs](#where-ci-runs)). Check & Test on `macos-latest` runs on
   each PR but is not required, because GitHub's macOS runners are often busy
-  and the run fails or is cancelled for capacity, not for the code.
+  and the run fails or is cancelled for capacity, not for the code. Check &
+  Test on `ubuntu-24.04-arm` runs on each PR and is not required either.
 - **The required checks on the reviewed head are the merge evidence.** Run the
   full local gate again after a merge only when the merged tree differs from
   what CI tested, or something on `main` gives a specific reason to.
 
 ### Where CI runs
 
-PR CI runs on GitHub Actions: `ci.yml`, plus `windows.yml` and `macos.yml`,
-which run Check & Test on `windows-latest` and `macos-latest`. All three run on
-each PR and each push to `main`; a new push to a PR cancels its older runs.
+PR CI runs on GitHub Actions: `ci.yml`, plus `windows.yml`, `macos.yml` and
+`linux-aarch64.yml`, which run Check & Test on `windows-latest`,
+`macos-latest` and `ubuntu-24.04-arm`. All four run on each PR and each push
+to `main`; a new push to a PR cancels its older runs.
 The required checks are the GitHub Actions app's `ci.yml` checks.
 
 `release.yml` and `e2e-kicad.yml` are disabled on GitHub and run on a
-maintainer's machine instead, as the **Copperpour Local CI** app: the Linux and
-Windows release builds and the real-KiCad gate, which needs KiCad installed.
+maintainer's machine instead, as the **Copperpour Local CI** app: the Linux
+x86_64 and Windows release builds and the real-KiCad gate, which needs KiCad
+installed.
 `macos.yml` builds the macOS release artifacts on each `v*` tag, and when a
 maintainer starts it on a release candidate, because Apple's licence allows
-macOS virtual machines only on Apple hardware.
+macOS virtual machines only on Apple hardware. `linux-aarch64.yml` does the
+same for the Linux aarch64 artifacts, on GitHub's arm64 runners, because local
+CI builds only Linux x86_64 and Windows.
 
 - A contributor's first PR waits for a maintainer to approve its workflow runs
   (GitHub's setting for first-time contributors). Fork PRs run with a read-only

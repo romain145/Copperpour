@@ -9,7 +9,8 @@ Produces a reproducible, self-contained .mcpb (ZIP archive) containing:
 
 Usage:
   python packaging/build-mcpb.py [--version X.Y.Z] [--binary PATH]
-                                 [--platform windows|macos|linux] [--out DIR]
+                                 [--platform windows|macos|linux|linux-aarch64]
+                                 [--out DIR]
 
 Defaults: version from Cargo.toml, platform from the host OS, binary from
 target/release/copperpour[.exe], output to dist/.
@@ -55,6 +56,15 @@ PLATFORMS = {
     "linux": {
         "mcpb_platform": "linux",
         "artifact_suffix": "linux-x86_64",
+        "binary_name": "copperpour",
+        "entry_point": "server/copperpour",
+        "exec_mode": 0o100755,
+    },
+    # MCPB has a platform dimension but no CPU one, so this bundle declares
+    # linux like the x86_64 one, and only its file name tells them apart.
+    "linux-aarch64": {
+        "mcpb_platform": "linux",
+        "artifact_suffix": "linux-aarch64",
         "binary_name": "copperpour",
         "entry_point": "server/copperpour",
         "exec_mode": 0o100755,

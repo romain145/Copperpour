@@ -103,7 +103,8 @@ saved zones, footprints/pads, tracks/vias, and drawing identities with pcbnew.
 PR CI runs on GitHub Actions ([GOVERNANCE.md](../GOVERNANCE.md#where-ci-runs)):
 `ci.yml` runs on every PR: the Rust workspace on Linux, formatting, clippy,
 documentation tests, plugin, Nix, licenses, PCM validation and the offline
-build; `windows.yml` and `macos.yml` run Check & Test on those systems. The
+build; `windows.yml`, `macos.yml` and `linux-aarch64.yml` run Check & Test on
+Windows, macOS and Linux aarch64. The
 release build and the real-KiCad job run on a maintainer's machine (local CI).
 The real-KiCad job runs `e2e-kicad.yml`'s steps against KiCad 10.0.8 in a
 Windows VM. It is not a per-PR
@@ -123,18 +124,27 @@ and runs the real-KiCad job. It publishes
 nothing.
 
 For the tag, the same job builds the release artifacts from the tagged commit.
-The macOS ones come from GitHub: pushing the tag runs `macos.yml`, which runs
-Check & Test on macOS and builds the `x86_64-apple-darwin` and `aarch64-apple-darwin` archives and the universal
-macOS PCM package and `.mcpb`, and validates both. It publishes nothing. Download
-its artifacts with `gh run download <run-id>` next to local CI's, merge the
-three PCM zips with `packaging/merge-pcm.py`, run
-`packaging/pcm-submission-metadata.py` on the merged zip, and publish all of
-them, the three `.mcpb` files included, in one release. A failure in any build, on either side, or in the
-real-KiCad job means the release is not cut, so no partial set of assets is
-published. To check the macOS build before tagging, run `gh workflow run
-macos.yml --ref <candidate>` beside local CI's dry run. PRs and `main` run
-only its Check & Test job, as an optional check. Linux aarch64, which `release.yml` built on
-GitHub, is not built.
+The macOS and Linux aarch64 ones come from GitHub. Pushing the tag runs
+`macos.yml`, which runs Check & Test on macOS and builds the
+`x86_64-apple-darwin` and `aarch64-apple-darwin` archives and the universal
+macOS PCM package and `.mcpb`, and validates both. It also runs
+`linux-aarch64.yml`, which runs Check & Test on Linux aarch64 and builds the
+`aarch64-unknown-linux-gnu` archive and the Linux aarch64 PCM package and
+`.mcpb`, and validates both, the `.mcpb` with a smoke test on aarch64. Neither
+publishes anything. Download both runs' artifacts with `gh run download
+<run-id>` next to local CI's, merge the Linux x86_64, macOS and Windows PCM zips
+with `packaging/merge-pcm.py`, run `packaging/pcm-submission-metadata.py` on the
+merged zip, and publish all of them, the Linux aarch64 PCM zip and the four
+`.mcpb` files included, in one release. Name the three zips to merge: the Linux
+aarch64 zip also declares `linux`, so a `copperpour-pcm-v<version>-*.zip` glob
+hands the merge a second Linux package, which it refuses. It is published on
+its own because with a fourth server the merged zip would pass
+`validate-pcm.py`'s download cap. A failure in any build, on any side, or in
+the real-KiCad job means the release is not cut, so no partial set of assets is
+published. To check the GitHub builds before tagging, run `gh workflow run
+macos.yml --ref <candidate>` and `gh workflow run linux-aarch64.yml --ref
+<candidate>` beside local CI's dry run. PRs and `main` run only their Check &
+Test jobs, as optional checks.
 
 In the PR description, list every command run and explicitly name checks skipped
 because they require KiCad, another operating system, credentials, or release

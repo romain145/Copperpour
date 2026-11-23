@@ -1,0 +1,173 @@
+name: Linux aarch64
+
+# The Linux aarch64 jobs, on GitHub's arm64 runners, which are free for public
+# repositories. release.yml runs on local CI, which builds Linux on x86_64
+# only, so no release before this workflow had a Linux aarch64 build. On PRs
+# and main this runs only Check & Test (ubuntu-24.04-arm), beside ci.yml; it is
+# not a required check. The build job runs only for a release, as macos.yml's
+# do. It publishes nothing; the maintainer cutting a release downloads its
+# artifacts beside macos.yml's.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  # Test and build a release candidate before tagging it
+  # (`gh workflow run linux-aarch64.yml --ref main`), or rebuild a tag's
+  # artifacts (`--ref v1.2.3`). Any ref other than a v* tag is a dry run under
+  # a synthetic version.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version for a ref that is not a v* tag
+        required: false
+        default: '0.0.0'
+        type: string
+
+# A new push to the same PR or ref supersedes the previous run.
+concurrency:
+  group: linux-aarch64-${{ github.ref }}
+  cancel-in-progress: true
+
+# Job-level permissions only, as in release.yml. No job here needs write access.
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: copperpour
+  RELEASE_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.version || '0.0.0' }}
+  RELEASE_ARTIFACT_LABEL: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}-smoke', inputs.version || '0.0.0') }}
+  COPPERPOUR_BUILD_COMMIT: ${{ github.sha }}
+
+jobs:
+  check:
+    name: Check & Test (ubuntu-24.04-arm)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        with:
+          tool: protoc@3.23.4
+          fallback: none
+      - uses: Swatinem/rust-cache@v2
+      - name: Check
+        run: cargo check --workspace --locked
+      - name: Test (unit + integration)
+        run: cargo test --workspace --locked --lib --tests
+      - name: Doctests
+        run: cargo test --workspace --locked --doc
+
+  # One job builds the server and packages the archive, the PCM zip and the
+  # .mcpb from it, so all three carry the same binary. macos.yml needs a second
+  # job only because its PCM package is a universal binary.
+  build:
+    name: Build aarch64-unknown-linux-gnu
+    # Release only: a v* tag, or a maintainer's manual run.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    # 22.04, not 24.04: its glibc (2.35) keeps the binary's floor at or below
+    # the x86_64 release's. The glibc step below fails if a newer image raises
+    # it; when GitHub retires 22.04, build in a Debian 12 container instead.
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      TARGET: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v7
+
+      # The runner's own target, so the pinned toolchain (rust-toolchain.toml)
+      # has it without a `rustup target add`.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        with:
+          tool: protoc@3.23.4
+          fallback: none
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ env.TARGET }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target "$TARGET" -p copperpour
+
+      # v0.17.0's x86_64 binary was built on Debian 12 and needs GLIBC_2.36 at
+      # most. This binary must run wherever that one does.
+      - name: Check the glibc the binary needs
+        run: |
+          set -euo pipefail
+          newest="$(objdump -T "target/$TARGET/release/$BINARY_NAME" \
+            | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"
+          echo "The binary needs $newest"
+          if [ "$(printf '%s\n' "$newest" GLIBC_2.36 | sort -V | tail -n 1)" != GLIBC_2.36 ]; then
+            echo "::error::the binary needs $newest; the x86_64 release needs GLIBC_2.36 at most"
+            exit 1
+          fi
+
+      - name: Package
+        run: |
+          cd "target/$TARGET/release"
+          tar czf "../../../$BINARY_NAME-$RELEASE_ARTIFACT_LABEL-$TARGET.tar.gz" "$BINARY_NAME"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ env.TARGET }}
+          path: ${{ env.BINARY_NAME }}-${{ env.RELEASE_ARTIFACT_LABEL }}-${{ env.TARGET }}.tar.gz
+
+      # A package of its own: with a fourth server, the all-platforms package
+      # merge-pcm.py writes would pass validate-pcm.py's download cap.
+      - name: Assemble PCM package
+        run: |
+          version="${RELEASE_VERSION#v}"
+          ./packaging/build-pcm.sh --version "$version" \
+            --binary "target/$TARGET/release/$BINARY_NAME" \
+            --platform linux-aarch64 --out dist
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Validate PCM package against KiCAD schema (release gate)
+        run: |
+          set -euo pipefail
+          python -m pip install jsonschema
+          version="${RELEASE_VERSION#v}"
+          python packaging/validate-pcm.py --zip "dist/copperpour-pcm-v$version-linux-aarch64.zip"
+
+      # The binary's own version is checked only on a tag: a dispatched dry run's
+      # version need not be Cargo.toml's. The smoke test runs the server here,
+      # on aarch64.
+      - name: Assemble and validate Claude Desktop (.mcpb) package
+        run: |
+          set -euo pipefail
+          version="${RELEASE_VERSION#v}"
+          python packaging/build-mcpb.py --version "$version" \
+            --binary "target/$TARGET/release/$BINARY_NAME" \
+            --platform linux-aarch64 --out dist-mcpb
+          bundle="dist-mcpb/copperpour-v$version-linux-aarch64.mcpb"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            python packaging/validate-mcpb.py --bundle "$bundle" \
+              --expected-version "$version" --smoke-test --check-binary-version
+          else
+            python packaging/validate-mcpb.py --bundle "$bundle" \
+              --expected-version "$version" --smoke-test
+          fi
+
+      - name: Upload PCM artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: copperpour-pcm-linux-aarch64
+          path: dist/copperpour-pcm-*.zip
+
+      - name: Upload Claude Desktop (.mcpb) artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: copperpour-mcpb-linux-aarch64
+          path: dist-mcpb/copperpour-*.mcpb
